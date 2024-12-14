@@ -1,179 +1,141 @@
-# Library Downloader README
+# Library Installation and Import Monitoring
+
+This repository contains two Python scripts that aim to automatically manage the installation of libraries when they are imported and also ensure compatibility with specified versions. The system checks whether the necessary packages are installed and attempts to install missing ones. Additionally, the scripts handle issues like network failures, version compatibility, and the option to create a virtual environment if needed.
+
+## Table of Contents
+
+1. [Overview](#overview)
+2. [Setup Instructions](#setup-instructions)
+3. [Usage](#usage)
+4. [Features](#features)
+5. [Dependencies](#dependencies)
+6. [Logging](#logging)
+7. [Error Handling](#error-handling)
+8. [License](#license)
 
 ## Overview
 
-The `library_downloader` module automates the process of installing required Python libraries for a script. It scans the script for library dependencies, checks for version requirements, handles virtual environments, and installs missing or outdated libraries using `pip`. Additionally, the system includes functionality to manage failed installation attempts with retries, logging, and system notifications.
+The two Python scripts work together to automate the process of checking and installing required libraries for your projects.
 
-This tool is particularly useful when you need to ensure that a Python script has all necessary libraries installed, either in a global environment or within a virtual environment.
+- **First Script**: Uses a custom import hook to monitor when a library is imported and automatically attempts to install it if it is not already installed. 
+- **Second Script**: Provides more robust functionality to manage package installations, including creating a virtual environment if needed, handling version compatibility, retry mechanisms for installations, and offering user prompts through graphical notifications.
 
-## Project Structure
+## Setup Instructions
 
-The project consists of two primary Python files:
+To use these scripts, ensure that Python is installed on your system. You can use these scripts on any platform (Windows, macOS, Linux) that supports Python.
 
-1. `__init__.py` - Initializes the library download process when the module is imported.
-2. `downloader.py` - Contains the core logic to handle the extraction of package dependencies, version checks, installation processes, virtual environment setup, and error handling.
+### 1. Clone the repository (if applicable)
+   ```
+   git clone <repository_url>
+   cd <repository_folder>
+   ```
 
-### Files:
+### 2. Install Dependencies
 
-library_downloader/
-│
-├── __init__.py          # Initializes the module and triggers the library download
-└── downloader.py        # Core functionality for downloading libraries, version checks, and virtual environments
+Before running the scripts, you need to install the required dependencies. You can install them using `pip`:
 
+```
+pip install filelock plyer packaging
+```
+
+These libraries are used for locking mechanisms, notifications, and version parsing.
+
+## Usage
+
+The two scripts can be used together for seamless package management. When you run the scripts, they will monitor imports and install any missing dependencies.
+
+### Running the Scripts
+
+1. **First Script** (`LibraryImportHook`):
+
+   The `LibraryImportHook` module will automatically install missing libraries when they are imported in your project. It uses the `install_with_lock` function to ensure no concurrent installation attempts for the same package.
+
+   To use this script:
+   - Simply import this module in your Python code, and it will automatically trigger the installation process when necessary.
+   ```python
+   import sys
+   from library_import_hook import LibraryImportHook
+   ```
+
+2. **Second Script** (`Library Management`):
+
+   The second script offers more control, including features such as:
+   - Automatic package installation with retry mechanisms.
+   - Creating virtual environments for isolated package management.
+   - Compatibility checks for the installed Python version.
+   - GUI prompts for virtual environment creation when installation fails.
+
+   You can run this script directly from the command line or incorporate it into your project:
+   ```python
+   from library_management import start_monitoring
+   start_monitoring()
+   ```
 
 ## Features
 
-### 1. **Automatic Library Download**
-   - The module triggers the download process as soon as it is imported (`start_library_download`).
-   - It reads the target Python script and extracts library dependencies, including version requirements (if specified in the script's comments).
-   - It installs any missing libraries or updates existing ones according to the version requirements.
+### 1. **Automatic Package Installation**
 
-### 2. **Virtual Environment Setup**
-   - If the script is not running within a virtual environment, the module can create one automatically and install all required libraries within it.
-   - A pop-up notification will inform users how to activate the virtual environment.
+   When a library is imported but not installed, the first script automatically installs it. If the package is already installed, the import proceeds without any interruptions.
 
-### 3. **Error Handling with Retries**
-   - If a library installation fails, the system retries up to three times using exponential backoff.
-   - Detailed error messages are logged for each failure and shown to the user (e.g., pip issues, network failures, or dependency conflicts).
+### 2. **Handling Installation Failures**
 
-### 4. **Python Version Compatibility**
-   - It checks the required Python version for each library and verifies that the current Python installation is compatible.
-   - Supports version comparisons using operators like `==`, `>=`, `<=`, etc.
+   The second script includes a retry mechanism with exponential backoff, providing multiple attempts to install packages and handle network or dependency conflicts. If the installation fails after multiple attempts, the system logs the error and provides useful feedback to the user.
 
-### 5. **Logging**
-   - Logs detailed information about the installation process, including successes, errors, and retries, in a file named `library_installation.log`.
-   - The log provides valuable insight into any issues that occur during installation.
+### 3. **Version Compatibility**
 
-### 6. **Standard Library Check**
-   - The module checks whether a package is part of Python’s standard library. If it is, the package is skipped, avoiding unnecessary installations.
+   Both scripts can handle version compatibility checks, ensuring that your packages are compatible with the current Python version.
 
-### 7. **Graphical User Interface (GUI) Prompts**
-   - If a library installation fails and a virtual environment is not active, the user is prompted to create a virtual environment via a GUI dialog (Tkinter).
-   - Users are given the option to create a virtual environment and retry installing missing libraries.
+### 4. **Virtual Environment Management**
 
-## Installation
+   The second script allows you to create a virtual environment if you are not already working within one. This ensures that the required packages are installed in an isolated environment, preventing conflicts with other projects.
 
-### Prerequisites:
-- Python 3.6 or higher
-- `pip` for installing Python packages
+### 5. **Graphical User Interface Prompts**
 
-You will also need to install the following Python packages:
+   If an installation fails, the second script will prompt the user to create a virtual environment via a Tkinter message box, providing an easy way for users to manage their Python environments.
 
-pip install plyer packaging
+### 6. **Logging**
+
+   Both scripts log their actions, such as package installation attempts and errors, into a `library_installation.log` file. This helps you keep track of actions taken by the scripts.
+
+### 7. **Cross-Platform Support**
+
+   The scripts support both Windows and Unix-based systems (Linux/macOS). They automatically adjust the paths for virtual environments and lock files based on the operating system.
 
 
-### Installation Steps:
-1. Clone or download this repository to your local machine.
+## Dependencies
 
-2. Install the required dependencies:
-   
-   pip install -r requirements.txt
+- **filelock**: A Python package that implements a file-based locking mechanism, ensuring that only one installation process runs for a given package at any time.
+- **plyer**: A cross-platform library for sending notifications to the user (used for GUI prompts).
+- **packaging**: A library for handling and comparing package versions in Python.
+- **tkinter**: Used for creating pop-up dialog boxes for user interaction (on installation failure).
+- **sysconfig**: Used to get standard library paths for checking if a package is part of the Python standard library.
 
+Install the dependencies using the following:
+```bash
+pip install filelock plyer packaging
+```
 
-   Alternatively, manually install:
+## Logging
 
-   pip install plyer packaging
- 
+The scripts log important events and errors into a log file called `library_installation.log`. The logging configuration includes timestamps, logging levels (INFO, ERROR), and descriptive messages, which helps in troubleshooting any issues related to package installation.
 
-### Usage
-
-1. **Importing the Library**
-
-   Simply import the `library_downloader` module into your Python script:
-
-   import library_downloader
-
-
-   When the module is imported, it will automatically start the library download process, checking the script for dependencies and installing any missing libraries.
-
-2. **Creating a Virtual Environment**
-   
-   If the script is not running inside a virtual environment, the `library_downloader` will create one automatically. You can specify the name of the virtual environment directory by modifying the `create_virtualenv()` function call in the `downloader.py`.
-
-3. **Custom Script Path**
-   
-   Modify the `script_path` variable in `start_library_download()` to point to your target script if it's not named `your_script.py`.
-
-4. **Handle Errors and Retry Logic**
-   
-   If the installation fails, the system will automatically retry up to three times with exponential backoff. If necessary, the user will be prompted with suggestions for resolving installation issues (e.g., upgrading `pip`, checking network connections, etc.).
-
-5. **Custom Dependencies**
-   
-   If you want to specify custom dependencies, you can modify the `dependencies` list in the `create_virtualenv()` function.
-
-## Code Explanation
-
-### `__init__.py`
-
-This file is used to automatically trigger the library download process when the `library_downloader` module is imported. It calls `start_library_download()` from `downloader.py` which starts the entire process.
-
-from .downloader import start_library_download
-
-# Automatically trigger the library download process when the module is imported
-start_library_download()
+Example log entry:
+```
+2024-12-14 10:30:02,123 - INFO - Successfully installed requests
+2024-12-14 10:35:45,987 - ERROR - Failed to install flask after 3 attempts.
+```
 
 
-### `downloader.py`
+## Error Handling
 
-This file contains the core logic for handling the download process.
+The script has built-in error handling for common issues such as:
 
-#### Key Functions:
+1. **Network Issues**: If the network is down or the package cannot be fetched, the script retries several times with exponential backoff.
+2. **Pip Errors**: If `pip` encounters issues, the script suggests upgrading `pip` or using a virtual environment to avoid conflicts.
+3. **File Locking**: The script uses `filelock` to avoid multiple concurrent installation attempts for the same package, ensuring safe package installation.
+4. **Virtual Environment Creation**: If installation fails and the user is not in a virtual environment, the script offers to create one and retry the installation.
 
-- **`extract_version_from_comments()`**: Extracts version constraints from comments in the Python script (e.g., `# Required: requests>=2.0.0`).
-  
-- **`is_python_compatible()`**: Checks if the current Python version meets the required version for a package.
-
-- **`install_with_retry()`**: Installs a package using `pip` with retries on failure.
-
-- **`create_virtualenv()`**: Creates a virtual environment if it doesn't exist and installs the necessary dependencies within it.
-
-- **`install_dependencies()`**: Installs the list of required dependencies using `pip`.
-
-- **`show_popup()`**: Displays a system notification (using `plyer`) to inform the user of important updates, like installation status or errors.
-
-- **`check_and_install_package()`**: Checks if a package is installed, if not, it attempts to install it (handling errors and retries).
-
-- **`is_standard_library()`**: Checks if a package is part of Python’s standard library (and should not be installed).
-
-- **`show_virtualenv_prompt()`**: Displays a GUI prompt asking the user if they want to create a virtual environment when an installation fails.
-
-- **`start_library_download()`**: The main entry point that reads a script, identifies required libraries, and installs them.
-
-### Logging
-
-The module uses Python's built-in `logging` library to log installation processes, errors, and retries. Logs are written to `library_installation.log`, which can help debug any installation issues.
-
-logging.basicConfig(filename='library_installation.log', level=logging.INFO,
-                    format='%(asctime)s - %(levelname)s - %(message)s')
-
-
-### Notifications
-
-Notifications are displayed to the user using the `plyer` library. This provides cross-platform notifications for Windows, macOS, and Linux.
-
-## Troubleshooting
-
-1. **Failed Package Installation**:
-   - Ensure that `pip` is up to date. If you encounter issues, try upgrading `pip` with:
-
-     pip install --upgrade pip
-
-   - If installing from a virtual environment, check that the virtual environment is activated correctly.
-
-2. **Permissions Errors**:
-   - On Unix-like systems (Linux/macOS), you might need elevated permissions to install some packages. Use `sudo` to resolve permission issues:
-
-     sudo pip install <package>
-
-
-3. **Network Issues**:
-   - If installations fail due to network errors (e.g., timeouts), check your internet connection or retry after some time.
 
 ## License
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
-
-## Contributing
-
-Feel free to submit issues or pull requests if you have suggestions or improvements. We welcome contributions!
+This project is licensed under the MIT License. See the LICENSE file for more details.
