@@ -1,9 +1,9 @@
-# library_downloader/downloader.py
-import subprocess
 import sys
 import os
+import subprocess
 import time
 import logging
+from filelock import FileLock
 from plyer import notification
 from tkinter import Tk, messagebox
 from packaging import version as packaging_version
@@ -11,10 +11,13 @@ import sysconfig
 import importlib
 import importlib.util
 import re
+import builtins
+import tempfile
 
 # Set up logging to a file
-logging.basicConfig(filename='library_installation.log', level=logging.INFO,
-                    format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(filename='library_installation.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+imported_packages = set()  # To keep track of already imported packages
 
 # Function to extract version requirements from comments
 def extract_version_from_comments(script_content):
@@ -44,35 +47,52 @@ def is_python_compatible(package_name, required_version=None):
             return True  # Assume compatibility if no valid operator is found
     return True  # Assume compatibility if no version specified
 
-# Improved function to install packages with retry and detailed feedback
-def install_with_retry(package_name, retries=3):
-    for attempt in range(retries):
-        try:
-            # Attempt to install the package
-            subprocess.check_call([sys.executable, "-m", "pip", "install", package_name])
-            print(f"{package_name} installed successfully.")
-            logging.info(f"Successfully installed {package_name}")
-            break
-        except subprocess.CalledProcessError as e:
-            logging.error(f"Attempt {attempt + 1} failed for {package_name}. Error: {e}")
-            
-            # Check for specific error codes and handle accordingly
-            if e.returncode == 1:
-                # Generic error, possibly due to pip issues or network failure
-                print(f"Error: Failed to install {package_name}. Please check your network connection or pip version.")
-                logging.error(f"Generic error during installation of {package_name}. Please check your network or pip version.")
-            elif e.returncode == 2:
-                # Specific error related to pip issues (e.g., outdated pip)
-                print(f"Error: There seems be an issue with pip. Try upgrading pip using: pip install --upgrade pip")
-                logging.error(f"Outdated pip version detected for {package_name}. Suggest upgrading pip.")
-            elif e.returncode == 3:
-                # Dependency conflicts or version issues
-                print(f"Error: There might be a conflict with dependencies. Try using a virtual environment to resolve issues.")
-                logging.error(f"Dependency conflict detected for {package_name}. Suggest using a virtual environment.")
-            else:
-                # For any other unknown errors
-                print(f"Unknown error occurred while installing {package_name}. Please try again or check logs.")
-                logging.error(f"Unknown error for {package_name}. Return code: {e.returncode}")
+# Function to check if a package is a standard Python library
+def is_standard_library(package_name):
+    # Get standard library directories from sysconfig
+    standard_lib_dirs = sysconfig.get_paths()["stdlib"]
+    # Check if the package is within any of these directories
+    try:
+        importlib.import_module(package_name)
+        return True
+    except ImportError:
+        return False
+
+# Cross-platform function to get the correct virtual environment activation script
+def get_activate_script(venv_dir="venv"):
+    if os.name == 'nt':  # Windows
+        return os.path.join(venv_dir, 'Scripts', 'activate.bat')
+    else:  # Unix-based systems (Linux, macOS)
+        return os.path.join(venv_dir, 'bin', 'activate')
+
+# Cross-platform temporary directory handling for lock file
+def get_lock_file(package_name):
+    lock_dir = tempfile.gettempdir()  # This works across platforms
+    lock_path = os.path.join(lock_dir, f'{package_name}.lock')
+    return lock_path
+
+# Improved function to install packages with retry and detailed feedback using locking
+def install_with_lock(package_name, retries=3):
+    lock_path = get_lock_file(package_name)  # Get platform-independent lock path
+    lock = FileLock(lock_path)
+
+    with lock:  # Acquire lock
+        for attempt in range(retries):
+            try:
+                subprocess.check_call([sys.executable, "-m", "pip", "install", package_name])
+                print(f"{package_name} installed successfully.")
+                logging.info(f"Successfully installed {package_name}")
+                break
+            except subprocess.CalledProcessError as e:
+                logging.error(f"Attempt {attempt + 1} failed for {package_name}. Error: {e}")
+                if e.returncode == 1:
+                    print(f"Error: Failed to install {package_name}. Please check your network connection or pip version.")
+                elif e.returncode == 2:
+                    print(f"Error: There seems to be an issue with pip. Try upgrading pip using: pip install --upgrade pip")
+                elif e.returncode == 3:
+                    print(f"Error: There might be a conflict with dependencies. Try using a virtual environment to resolve issues.")
+                else:
+                    print(f"Unknown error occurred while installing {package_name}. Please try again or check logs.")
             
             time.sleep(2 ** attempt)  # Exponential backoff
             if attempt == retries - 1:
@@ -93,11 +113,8 @@ def create_virtualenv(venv_dir="venv", install_deps=False, dependencies=None):
     else:
         logging.info(f"Virtual environment already exists at {venv_dir}")
     
-    # Determine the correct activation script based on the OS
-    if os.name == 'nt':  # Windows
-        activate_script = os.path.join(venv_dir, 'Scripts', 'activate.bat')
-    else:  # Unix-based systems (Linux, macOS)
-        activate_script = os.path.join(venv_dir, 'bin', 'activate')
+    # Get the activation script for the current platform
+    activate_script = get_activate_script(venv_dir)
     
     # Ensure the activation script exists
     try:
@@ -115,20 +132,14 @@ def create_virtualenv(venv_dir="venv", install_deps=False, dependencies=None):
     # Show the activation instructions in a popup
     show_popup("Virtual Environment Setup", f"To activate the virtual environment, run:\n\n{activate_script}")
 
+# Function to install dependencies in the virtual environment
 def install_dependencies(venv_dir, dependencies):
-    """Install a list of dependencies using pip."""
-    try:
-        pip_path = os.path.join(venv_dir, 'Scripts', 'pip') if os.name == 'nt' else os.path.join(venv_dir, 'bin', 'pip')
-        logging.info(f"Installing dependencies: {', '.join(dependencies)}...")
+    # Activate the virtual environment
+    activate_script = get_activate_script(venv_dir)
+    for dep in dependencies:
+        install_with_lock(dep)
 
-        subprocess.check_call([pip_path, 'install'] + dependencies)
-        logging.info("Dependencies installed successfully.")
-    except subprocess.CalledProcessError as e:
-        logging.error(f"Failed to install dependencies: {e}")
-        show_popup("Installation Error", f"Error installing dependencies: {e}")
-        return
-
-# Function to show a popup message
+# Show popup notifications
 def show_popup(title, message):
     notification.notify(
         title=title,
@@ -151,7 +162,7 @@ def check_and_install_package(package_name, required_version=None, upgrade=False
             create_virtualenv()
 
         # Attempt to install the package
-        install_with_retry(package_name)
+        install_with_lock(package_name)
 
     except subprocess.CalledProcessError:
         logging.error(f"Error during installation of {package_name}: {e}")
@@ -163,17 +174,6 @@ def check_and_install_package(package_name, required_version=None, upgrade=False
     except Exception as e:
         logging.error(f"Unexpected error with {package_name}: {e}")
         print(f"Unexpected error with {package_name}: {e}")
-
-# Function to check if a package is a standard Python library
-def is_standard_library(package_name):
-    # Get standard library directories from sysconfig
-    standard_lib_dirs = sysconfig.get_paths()["stdlib"]
-    # Check if the package is within any of these directories
-    try:
-        importlib.import_module(package_name)
-        return True
-    except ImportError:
-        return False
 
 # Function to show the virtual environment creation prompt (GUI)
 def show_virtualenv_prompt(package_name):
@@ -200,26 +200,28 @@ def reinstall_libraries_in_virtualenv():
 # List to keep track of packages that need to be installed
 packages_to_install = []
 
-# Function to start the library download process
-def start_library_download():
-    print("Library downloader started...")
-    # Example script path - You can change this to point to your script
-    script_path = "your_script.py"
-    
-    # Open the script and scan for required packages
-    with open(script_path, 'r') as file:
-        script_content = file.read()
+# Function to monitor imports and install missing libraries
+def monitor_imports(frame, event, arg):
+    if event == 'call' and frame.f_code.co_name == "exec":
+        # Get the code being executed
+        code = frame.f_globals.get('__code__')
+        if code:
+            for line in code.co_lines():
+                if 'import' in line:
+                    package_name = line.split()[1]  # Extract the package name from the import
+                    if package_name not in imported_packages:  # Avoid processing the same package multiple times
+                        print(f"Detected import statement for: {package_name}")
+                        # Trigger library installation
+                        check_and_install_package(package_name)
+                        imported_packages.add(package_name)  # Mark as processed
 
-    # Extract version requirements
-    version_requirements = extract_version_from_comments(script_content)
+    return None
 
-    # Find all package names (this assumes all import statements are in the form `import package` or `from package import ...`)
-    import_statements = [line.strip() for line in script_content.splitlines() if line.startswith('import') or line.startswith('from')]
-    
-    for stmt in import_statements:
-        package_name = stmt.split()[1].split('.')[0]  # Get the package name (handling submodules)
-        if package_name not in version_requirements:
-            packages_to_install.append(package_name)
+# Function to start the monitoring process
+def start_monitoring():
+    print("Library downloader is now active. Waiting for imports...")
+    sys.setprofile(monitor_imports)  # Set the import monitoring hook
 
-    for package_name in packages_to_install:
-        check_and_install_package(package_name)
+# Start monitoring imports
+start_monitoring()
+
